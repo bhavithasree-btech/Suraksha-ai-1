@@ -1,6 +1,6 @@
 # Copyright (C) Dnspython Contributors, see LICENSE for text of ISC license
 
-# Copyright (C) 2003-2007, 2009-2011 Nominum, Inc.
+# Copyright (C) 2003-2007, 2009, 2011 Nominum, Inc.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose with or without fee is hereby granted,
@@ -15,19 +15,58 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 # OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-"""DNS rdata type classes"""
+"""dnspython DNS toolkit"""
 
 __all__ = [
-    "ANY",
-    "IN",
-    "CH",
-    "dnskeybase",
-    "dsbase",
-    "euibase",
-    "mxbase",
-    "nsbase",
-    "svcbbase",
-    "tlsabase",
-    "txtbase",
-    "util",
+    "asyncbackend",
+    "asyncquery",
+    "asyncresolver",
+    "btree",
+    "btreezone",
+    "dnssec",
+    "dnssecalgs",
+    "dnssectypes",
+    "e164",
+    "edns",
+    "entropy",
+    "exception",
+    "flags",
+    "immutable",
+    "inet",
+    "ipv4",
+    "ipv6",
+    "message",
+    "name",
+    "namedict",
+    "node",
+    "opcode",
+    "query",
+    "quic",
+    "rcode",
+    "rdata",
+    "rdataclass",
+    "rdataset",
+    "rdatatype",
+    "renderer",
+    "resolver",
+    "reversename",
+    "rrset",
+    "serial",
+    "set",
+    "tokenizer",
+    "transaction",
+    "tsig",
+    "tsigkeyring",
+    "ttl",
+    "rdtypes",
+    "update",
+    "version",
+    "versioned",
+    "wire",
+    "xfr",
+    "zone",
+    "zonetypes",
+    "zonefile",
 ]
+
+from dns.version import version as __version__  # noqa
