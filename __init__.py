@@ -1,115 +1,126 @@
+"""
+Click is a simple Python module inspired by the stdlib optparse to make
+writing command line scripts fun. Unlike other modules, it's based
+around a simple API that does not come with too much magic and is
+composable.
+"""
+
 from __future__ import annotations
 
-from ._core._contextmanagers import AsyncContextManagerMixin as AsyncContextManagerMixin
-from ._core._contextmanagers import ContextManagerMixin as ContextManagerMixin
-from ._core._eventloop import current_time as current_time
-from ._core._eventloop import get_all_backends as get_all_backends
-from ._core._eventloop import get_available_backends as get_available_backends
-from ._core._eventloop import get_cancelled_exc_class as get_cancelled_exc_class
-from ._core._eventloop import run as run
-from ._core._eventloop import sleep as sleep
-from ._core._eventloop import sleep_forever as sleep_forever
-from ._core._eventloop import sleep_until as sleep_until
-from ._core._exceptions import BrokenResourceError as BrokenResourceError
-from ._core._exceptions import BrokenWorkerInterpreter as BrokenWorkerInterpreter
-from ._core._exceptions import BrokenWorkerProcess as BrokenWorkerProcess
-from ._core._exceptions import BusyResourceError as BusyResourceError
-from ._core._exceptions import ClosedResourceError as ClosedResourceError
-from ._core._exceptions import ConnectionFailed as ConnectionFailed
-from ._core._exceptions import DelimiterNotFound as DelimiterNotFound
-from ._core._exceptions import EndOfStream as EndOfStream
-from ._core._exceptions import IncompleteRead as IncompleteRead
-from ._core._exceptions import NoEventLoopError as NoEventLoopError
-from ._core._exceptions import RunFinishedError as RunFinishedError
-from ._core._exceptions import TaskCancelled as TaskCancelled
-from ._core._exceptions import TaskFailed as TaskFailed
-from ._core._exceptions import TaskNotFinished as TaskNotFinished
-from ._core._exceptions import TypedAttributeLookupError as TypedAttributeLookupError
-from ._core._exceptions import WouldBlock as WouldBlock
-from ._core._fileio import AsyncFile as AsyncFile
-from ._core._fileio import Path as Path
-from ._core._fileio import open_file as open_file
-from ._core._fileio import wrap_file as wrap_file
-from ._core._resources import aclose_forcefully as aclose_forcefully
-from ._core._signals import open_signal_receiver as open_signal_receiver
-from ._core._sockets import TCPConnectable as TCPConnectable
-from ._core._sockets import UNIXConnectable as UNIXConnectable
-from ._core._sockets import as_connectable as as_connectable
-from ._core._sockets import connect_tcp as connect_tcp
-from ._core._sockets import connect_unix as connect_unix
-from ._core._sockets import create_connected_udp_socket as create_connected_udp_socket
-from ._core._sockets import (
-    create_connected_unix_datagram_socket as create_connected_unix_datagram_socket,
-)
-from ._core._sockets import create_tcp_listener as create_tcp_listener
-from ._core._sockets import create_udp_socket as create_udp_socket
-from ._core._sockets import create_unix_datagram_socket as create_unix_datagram_socket
-from ._core._sockets import create_unix_listener as create_unix_listener
-from ._core._sockets import getaddrinfo as getaddrinfo
-from ._core._sockets import getnameinfo as getnameinfo
-from ._core._sockets import notify_closing as notify_closing
-from ._core._sockets import wait_readable as wait_readable
-from ._core._sockets import wait_socket_readable as wait_socket_readable
-from ._core._sockets import wait_socket_writable as wait_socket_writable
-from ._core._sockets import wait_writable as wait_writable
-from ._core._streams import create_memory_object_stream as create_memory_object_stream
-from ._core._subprocesses import open_process as open_process
-from ._core._subprocesses import run_process as run_process
-from ._core._synchronization import CapacityLimiter as CapacityLimiter
-from ._core._synchronization import (
-    CapacityLimiterStatistics as CapacityLimiterStatistics,
-)
-from ._core._synchronization import Condition as Condition
-from ._core._synchronization import ConditionStatistics as ConditionStatistics
-from ._core._synchronization import Event as Event
-from ._core._synchronization import EventStatistics as EventStatistics
-from ._core._synchronization import Lock as Lock
-from ._core._synchronization import LockStatistics as LockStatistics
-from ._core._synchronization import ResourceGuard as ResourceGuard
-from ._core._synchronization import Semaphore as Semaphore
-from ._core._synchronization import SemaphoreStatistics as SemaphoreStatistics
-from ._core._tasks import TASK_STATUS_IGNORED as TASK_STATUS_IGNORED
-from ._core._tasks import CancelScope as CancelScope
-from ._core._tasks import TaskHandle as TaskHandle
-from ._core._tasks import create_task_group as create_task_group
-from ._core._tasks import current_effective_deadline as current_effective_deadline
-from ._core._tasks import fail_after as fail_after
-from ._core._tasks import move_on_after as move_on_after
-from ._core._tempfile import NamedTemporaryFile as NamedTemporaryFile
-from ._core._tempfile import SpooledTemporaryFile as SpooledTemporaryFile
-from ._core._tempfile import TemporaryDirectory as TemporaryDirectory
-from ._core._tempfile import TemporaryFile as TemporaryFile
-from ._core._tempfile import gettempdir as gettempdir
-from ._core._tempfile import gettempdirb as gettempdirb
-from ._core._tempfile import mkdtemp as mkdtemp
-from ._core._tempfile import mkstemp as mkstemp
-from ._core._testing import TaskInfo as TaskInfo
-from ._core._testing import get_current_task as get_current_task
-from ._core._testing import get_running_tasks as get_running_tasks
-from ._core._testing import wait_all_tasks_blocked as wait_all_tasks_blocked
-from ._core._typedattr import TypedAttributeProvider as TypedAttributeProvider
-from ._core._typedattr import TypedAttributeSet as TypedAttributeSet
-from ._core._typedattr import typed_attribute as typed_attribute
-
-# Re-export imports so they look like they live directly in this package
-for __value in list(locals().values()):
-    if getattr(__value, "__module__", "").startswith("anyio."):
-        __value.__module__ = __name__
+from .core import Argument as Argument
+from .core import Command as Command
+from .core import CommandCollection as CommandCollection
+from .core import Context as Context
+from .core import Group as Group
+from .core import Option as Option
+from .core import Parameter as Parameter
+from .core import ParameterSource as ParameterSource
+from .decorators import argument as argument
+from .decorators import command as command
+from .decorators import confirmation_option as confirmation_option
+from .decorators import group as group
+from .decorators import help_option as help_option
+from .decorators import make_pass_decorator as make_pass_decorator
+from .decorators import option as option
+from .decorators import pass_context as pass_context
+from .decorators import pass_obj as pass_obj
+from .decorators import password_option as password_option
+from .decorators import version_option as version_option
+from .exceptions import Abort as Abort
+from .exceptions import BadArgumentUsage as BadArgumentUsage
+from .exceptions import BadOptionUsage as BadOptionUsage
+from .exceptions import BadParameter as BadParameter
+from .exceptions import ClickException as ClickException
+from .exceptions import FileError as FileError
+from .exceptions import MissingParameter as MissingParameter
+from .exceptions import NoSuchCommand as NoSuchCommand
+from .exceptions import NoSuchOption as NoSuchOption
+from .exceptions import UsageError as UsageError
+from .formatting import HelpFormatter as HelpFormatter
+from .formatting import wrap_text as wrap_text
+from .globals import get_current_context as get_current_context
+from .termui import clear as clear
+from .termui import confirm as confirm
+from .termui import echo_via_pager as echo_via_pager
+from .termui import edit as edit
+from .termui import get_pager_file as get_pager_file
+from .termui import getchar as getchar
+from .termui import launch as launch
+from .termui import pause as pause
+from .termui import progressbar as progressbar
+from .termui import prompt as prompt
+from .termui import secho as secho
+from .termui import style as style
+from .termui import unstyle as unstyle
+from .types import BOOL as BOOL
+from .types import Choice as Choice
+from .types import DateTime as DateTime
+from .types import File as File
+from .types import FLOAT as FLOAT
+from .types import FloatRange as FloatRange
+from .types import INT as INT
+from .types import IntRange as IntRange
+from .types import ParamType as ParamType
+from .types import Path as Path
+from .types import STRING as STRING
+from .types import Tuple as Tuple
+from .types import UNPROCESSED as UNPROCESSED
+from .types import UUID as UUID
+from .utils import echo as echo
+from .utils import format_filename as format_filename
+from .utils import get_app_dir as get_app_dir
+from .utils import get_binary_stream as get_binary_stream
+from .utils import get_text_stream as get_text_stream
+from .utils import open_file as open_file
 
 
-del __value
+def __getattr__(name: str) -> object:
+    import warnings
 
-
-def __getattr__(attr: str) -> type[BrokenWorkerInterpreter]:
-    """Support deprecated aliases."""
-    if attr == "BrokenWorkerIntepreter":
-        import warnings
+    if name == "BaseCommand":
+        from .core import _BaseCommand
 
         warnings.warn(
-            "The 'BrokenWorkerIntepreter' alias is deprecated, use 'BrokenWorkerInterpreter' instead.",
+            "'BaseCommand' is deprecated and will be removed in Click 9.0. Use"
+            " 'Command' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
-        return BrokenWorkerInterpreter
+        return _BaseCommand
 
-    raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
+    if name == "MultiCommand":
+        from .core import _MultiCommand
+
+        warnings.warn(
+            "'MultiCommand' is deprecated and will be removed in Click 9.0. Use"
+            " 'Group' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _MultiCommand
+
+    if name == "OptionParser":
+        from .parser import _OptionParser
+
+        warnings.warn(
+            "'OptionParser' is deprecated and will be removed in Click 9.0. The"
+            " old parser is available in 'optparse'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _OptionParser
+
+    if name == "__version__":
+        import importlib.metadata
+        import warnings
+
+        warnings.warn(
+            "The '__version__' attribute is deprecated and will be removed in"
+            " Click 9.1. Use feature detection or"
+            " 'importlib.metadata.version(\"click\")' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return importlib.metadata.version("click")
+
+    raise AttributeError(name)
