@@ -4,7 +4,7 @@
 
     Base lexer classes.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -12,12 +12,12 @@ import re
 import sys
 import time
 
-from pip._vendor.pygments.filter import apply_filters, Filter
-from pip._vendor.pygments.filters import get_filter_by_name
-from pip._vendor.pygments.token import Error, Text, Other, Whitespace, _TokenType
-from pip._vendor.pygments.util import get_bool_opt, get_int_opt, get_list_opt, \
+from pygments.filter import apply_filters, Filter
+from pygments.filters import get_filter_by_name
+from pygments.token import Error, Text, Other, Whitespace, _TokenType
+from pygments.util import get_bool_opt, get_int_opt, get_list_opt, \
     make_analysator, Future, guess_decode
-from pip._vendor.pygments.regexopt import regex_opt
+from pygments.regexopt import regex_opt
 
 __all__ = ['Lexer', 'RegexLexer', 'ExtendedRegexLexer', 'DelegatingLexer',
            'LexerContext', 'include', 'inherit', 'bygroups', 'using', 'this',
@@ -211,9 +211,7 @@ class Lexer(metaclass=LexerMeta):
                 text, _ = guess_decode(text)
             elif self.encoding == 'chardet':
                 try:
-                    # pip vendoring note: this code is not reachable by pip,
-                    # removed import of chardet to make it clear.
-                    raise ImportError('chardet is not vendored by pip')
+                    import chardet
                 except ImportError as e:
                     raise ImportError('To enable chardet encoding guessing, '
                                       'please install the chardet library '
@@ -446,8 +444,9 @@ def using(_other, **kwargs):
             # function has to create a new lexer instance
             if kwargs:
                 # XXX: cache that somehow
-                kwargs.update(lexer.options)
-                lx = lexer.__class__(**kwargs)
+                d = dict(lexer.options)
+                d.update(kwargs)
+                lx = lexer.__class__(**d)
             else:
                 lx = lexer
             s = match.start()
@@ -458,8 +457,9 @@ def using(_other, **kwargs):
     else:
         def callback(lexer, match, ctx=None):
             # XXX: cache that somehow
-            kwargs.update(lexer.options)
-            lx = _other(**kwargs)
+            d = dict(lexer.options)
+            d.update(kwargs)
+            lx = _other(**d)
 
             s = match.start()
             for i, t, v in lx.get_tokens_unprocessed(match.group(), **gt_kwargs):

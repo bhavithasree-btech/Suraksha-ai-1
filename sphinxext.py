@@ -5,7 +5,7 @@
     Sphinx extension to generate automatic documentation of lexers,
     formatters and filters.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -92,8 +92,8 @@ class PygmentsDoc(Directive):
 
         The columns are the lexer name, the extensions handled by this lexer
         (or "None"), the aliases and a link to the lexer class."""
-        from pip._vendor.pygments.lexers._mapping import LEXERS
-        from pip._vendor.pygments.lexers import find_lexer_class
+        from pygments.lexers._mapping import LEXERS
+        import pygments.lexers
         out = []
 
         table = []
@@ -104,7 +104,7 @@ class PygmentsDoc(Directive):
             return name
 
         for classname, data in sorted(LEXERS.items(), key=lambda x: x[1][1].lower()):
-            lexer_cls = find_lexer_class(data[1])
+            lexer_cls = pygments.lexers.find_lexer_class(data[1])
             extensions = lexer_cls.filenames + lexer_cls.alias_filenames
 
             table.append({
@@ -148,8 +148,8 @@ class PygmentsDoc(Directive):
         return '\n'.join(out)
 
     def document_lexers(self):
-        from pip._vendor.pygments.lexers._mapping import LEXERS
-        from pip._vendor import pygments
+        from pygments.lexers._mapping import LEXERS
+        import pygments
         import inspect
         import pathlib
 
@@ -213,7 +213,7 @@ class PygmentsDoc(Directive):
         return ''.join(out)
 
     def document_formatters(self):
-        from pip._vendor.pygments.formatters import FORMATTERS
+        from pygments.formatters import FORMATTERS
 
         out = []
         for classname, data in sorted(FORMATTERS.items(), key=lambda x: x[0]):
@@ -231,7 +231,7 @@ class PygmentsDoc(Directive):
         return ''.join(out)
 
     def document_filters(self):
-        from pip._vendor.pygments.filters import FILTERS
+        from pygments.filters import FILTERS
 
         out = []
         for name, cls in FILTERS.items():
