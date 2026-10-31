@@ -1,4 +1,1 @@
-from .input import Validator
-from .toolkit import RichToolkit, RichToolkitTheme
-
-__all__ = ["RichToolkit", "RichToolkitTheme", "Validator"]
+__version__ = "0.37.2"

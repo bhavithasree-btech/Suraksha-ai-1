@@ -1,36 +1,99 @@
 from __future__ import annotations
 
-import enum
-import typing as t
+import asyncio
+import functools
+import re
+import sys
+import typing
+from contextlib import contextmanager
+
+from starlette.types import Scope
+
+if sys.version_info >= (3, 10):  # pragma: no cover
+    from typing import TypeGuard
+else:  # pragma: no cover
+    from typing_extensions import TypeGuard
+
+has_exceptiongroups = True
+if sys.version_info < (3, 11):  # pragma: no cover
+    try:
+        from exceptiongroup import BaseExceptionGroup
+    except ImportError:
+        has_exceptiongroups = False
+
+T = typing.TypeVar("T")
+AwaitableCallable = typing.Callable[..., typing.Awaitable[T]]
 
 
-class Sentinel(enum.Enum):
-    """Enum used to define sentinel values.
-
-    .. seealso::
-
-        `PEP 661 - Sentinel Values <https://peps.python.org/pep-0661/>`_.
-    """
-
-    UNSET = object()
-    FLAG_NEEDS_VALUE = object()
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}.{self.name}"
+@typing.overload
+def is_async_callable(obj: AwaitableCallable[T]) -> TypeGuard[AwaitableCallable[T]]:
+    ...
 
 
-UNSET: t.Literal[Sentinel.UNSET] = Sentinel.UNSET
-"""Sentinel used to indicate that a value is not set."""
+@typing.overload
+def is_async_callable(obj: typing.Any) -> TypeGuard[AwaitableCallable[typing.Any]]:
+    ...
 
-FLAG_NEEDS_VALUE: t.Literal[Sentinel.FLAG_NEEDS_VALUE] = Sentinel.FLAG_NEEDS_VALUE
-"""Sentinel used to indicate an option was passed as a flag without a
-value but is not a flag option.
 
-``Option.consume_value`` uses this to prompt or use the ``flag_value``.
-"""
+def is_async_callable(obj: typing.Any) -> typing.Any:
+    while isinstance(obj, functools.partial):
+        obj = obj.func
 
-T_UNSET: t.TypeAlias = t.Literal[Sentinel.UNSET]
-"""Type hint for the :data:`UNSET` sentinel value."""
+    return asyncio.iscoroutinefunction(obj) or (
+        callable(obj) and asyncio.iscoroutinefunction(obj.__call__)
+    )
 
-T_FLAG_NEEDS_VALUE: t.TypeAlias = t.Literal[Sentinel.FLAG_NEEDS_VALUE]
-"""Type hint for the :data:`FLAG_NEEDS_VALUE` sentinel value."""
+
+T_co = typing.TypeVar("T_co", covariant=True)
+
+
+class AwaitableOrContextManager(
+    typing.Awaitable[T_co], typing.AsyncContextManager[T_co], typing.Protocol[T_co]
+):
+    ...
+
+
+class SupportsAsyncClose(typing.Protocol):
+    async def close(self) -> None:
+        ...  # pragma: no cover
+
+
+SupportsAsyncCloseType = typing.TypeVar(
+    "SupportsAsyncCloseType", bound=SupportsAsyncClose, covariant=False
+)
+
+
+class AwaitableOrContextManagerWrapper(typing.Generic[SupportsAsyncCloseType]):
+    __slots__ = ("aw", "entered")
+
+    def __init__(self, aw: typing.Awaitable[SupportsAsyncCloseType]) -> None:
+        self.aw = aw
+
+    def __await__(self) -> typing.Generator[typing.Any, None, SupportsAsyncCloseType]:
+        return self.aw.__await__()
+
+    async def __aenter__(self) -> SupportsAsyncCloseType:
+        self.entered = await self.aw
+        return self.entered
+
+    async def __aexit__(self, *args: typing.Any) -> None | bool:
+        await self.entered.close()
+        return None
+
+
+@contextmanager
+def collapse_excgroups() -> typing.Generator[None, None, None]:
+    try:
+        yield
+    except BaseException as exc:
+        if has_exceptiongroups:
+            while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
+                exc = exc.exceptions[0]  # pragma: no cover
+
+        raise exc
+
+
+def get_route_path(scope: Scope) -> str:
+    root_path = scope.get("root_path", "")
+    route_path = re.sub(r"^" + root_path, "", scope["path"])
+    return route_path
