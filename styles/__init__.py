@@ -4,13 +4,13 @@
 
     Contains built-in styles.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-from pip._vendor.pygments.plugin import find_plugin_styles
-from pip._vendor.pygments.util import ClassNotFound
-from pip._vendor.pygments.styles._mapping import STYLES
+from pygments.plugin import find_plugin_styles
+from pygments.util import ClassNotFound
+from pygments.styles._mapping import STYLES
 
 #: A dictionary of built-in styles, mapping style names to
 #: ``'submodule::classname'`` strings.
