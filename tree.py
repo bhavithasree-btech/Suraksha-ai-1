@@ -1,333 +1,257 @@
-"""A tree representation of a linear markdown-it token stream.
+from typing import Iterator, List, Optional, Tuple
 
-This module is not part of upstream JavaScript markdown-it.
-"""
+from ._loop import loop_first, loop_last
+from .console import Console, ConsoleOptions, RenderableType, RenderResult
+from .jupyter import JupyterMixin
+from .measure import Measurement
+from .segment import Segment
+from .style import Style, StyleStack, StyleType
+from .styled import Styled
 
-from __future__ import annotations
-
-from collections.abc import Generator, Sequence
-import textwrap
-from typing import Any, NamedTuple, TypeVar, overload
-
-from .token import Token
-
-
-class _NesterTokens(NamedTuple):
-    opening: Token
-    closing: Token
+GuideType = Tuple[str, str, str, str]
 
 
-_NodeType = TypeVar("_NodeType", bound="SyntaxTreeNode")
+class Tree(JupyterMixin):
+    """A renderable for a tree structure.
 
+    Attributes:
+        ASCII_GUIDES (GuideType): Guide lines used when Console.ascii_only is True.
+        TREE_GUIDES (List[GuideType, GuideType, GuideType]): Default guide lines.
 
-class SyntaxTreeNode:
-    """A Markdown syntax tree node.
-
-    A class that can be used to construct a tree representation of a linear
-    `markdown-it-py` token stream.
-
-    Each node in the tree represents either:
-      - root of the Markdown document
-      - a single unnested `Token`
-      - a `Token` "_open" and "_close" token pair, and the tokens nested in
-          between
+    Args:
+        label (RenderableType): The renderable or str for the tree label.
+        style (StyleType, optional): Style of this tree. Defaults to "tree".
+        guide_style (StyleType, optional): Style of the guide lines. Defaults to "tree.line".
+        expanded (bool, optional): Also display children. Defaults to True.
+        highlight (bool, optional): Highlight renderable (if str). Defaults to False.
+        hide_root (bool, optional): Hide the root node. Defaults to False.
     """
 
+    ASCII_GUIDES = ("    ", "|   ", "+-- ", "`-- ")
+    TREE_GUIDES = [
+        ("    ", "│   ", "├── ", "└── "),
+        ("    ", "┃   ", "┣━━ ", "┗━━ "),
+        ("    ", "║   ", "╠══ ", "╚══ "),
+    ]
+
     def __init__(
-        self, tokens: Sequence[Token] = (), *, create_root: bool = True
-    ) -> None:
-        """Initialize a `SyntaxTreeNode` from a token stream.
-
-        If `create_root` is True, create a root node for the document.
-        """
-        # Only nodes representing an unnested token have self.token
-        self.token: Token | None = None
-
-        # Only containers have nester tokens
-        self.nester_tokens: _NesterTokens | None = None
-
-        # Root node does not have self.parent
-        self._parent: Any = None
-
-        # Empty list unless a non-empty container, or unnested token that has
-        # children (i.e. inline or img)
-        self._children: list[Any] = []
-
-        if create_root:
-            self._set_children_from_tokens(tokens)
-            return
-
-        if not tokens:
-            raise ValueError(
-                "Can only create root from empty token sequence."
-                " Set `create_root=True`."
-            )
-        elif len(tokens) == 1:
-            inline_token = tokens[0]
-            if inline_token.nesting:
-                raise ValueError(
-                    "Unequal nesting level at the start and end of token stream."
-                )
-            self.token = inline_token
-            if inline_token.children:
-                self._set_children_from_tokens(inline_token.children)
-        else:
-            self.nester_tokens = _NesterTokens(tokens[0], tokens[-1])
-            self._set_children_from_tokens(tokens[1:-1])
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.type})"
-
-    @overload
-    def __getitem__(self: _NodeType, item: int) -> _NodeType: ...
-
-    @overload
-    def __getitem__(self: _NodeType, item: slice) -> list[_NodeType]: ...
-
-    def __getitem__(self: _NodeType, item: int | slice) -> _NodeType | list[_NodeType]:
-        return self.children[item]
-
-    def to_tokens(self: _NodeType) -> list[Token]:
-        """Recover the linear token stream."""
-
-        def recursive_collect_tokens(node: _NodeType, token_list: list[Token]) -> None:
-            if node.type == "root":
-                for child in node.children:
-                    recursive_collect_tokens(child, token_list)
-            elif node.token:
-                token_list.append(node.token)
-            else:
-                assert node.nester_tokens
-                token_list.append(node.nester_tokens.opening)
-                for child in node.children:
-                    recursive_collect_tokens(child, token_list)
-                token_list.append(node.nester_tokens.closing)
-
-        tokens: list[Token] = []
-        recursive_collect_tokens(self, tokens)
-        return tokens
-
-    @property
-    def children(self: _NodeType) -> list[_NodeType]:
-        return self._children
-
-    @children.setter
-    def children(self: _NodeType, value: list[_NodeType]) -> None:
-        self._children = value
-
-    @property
-    def parent(self: _NodeType) -> _NodeType | None:
-        return self._parent  # type: ignore
-
-    @parent.setter
-    def parent(self: _NodeType, value: _NodeType | None) -> None:
-        self._parent = value
-
-    @property
-    def is_root(self) -> bool:
-        """Is the node a special root node?"""
-        return not (self.token or self.nester_tokens)
-
-    @property
-    def is_nested(self) -> bool:
-        """Is this node nested?.
-
-        Returns `True` if the node represents a `Token` pair and tokens in the
-        sequence between them, where `Token.nesting` of the first `Token` in
-        the pair is 1 and nesting of the other `Token` is -1.
-        """
-        return bool(self.nester_tokens)
-
-    @property
-    def siblings(self: _NodeType) -> Sequence[_NodeType]:
-        """Get siblings of the node.
-
-        Gets the whole group of siblings, including self.
-        """
-        if not self.parent:
-            return [self]
-        return self.parent.children
-
-    @property
-    def type(self) -> str:
-        """Get a string type of the represented syntax.
-
-        - "root" for root nodes
-        - `Token.type` if the node represents an unnested token
-        - `Token.type` of the opening token, with "_open" suffix stripped, if
-            the node represents a nester token pair
-        """
-        if self.is_root:
-            return "root"
-        if self.token:
-            return self.token.type
-        assert self.nester_tokens
-        return self.nester_tokens.opening.type.removesuffix("_open")
-
-    @property
-    def next_sibling(self: _NodeType) -> _NodeType | None:
-        """Get the next node in the sequence of siblings.
-
-        Returns `None` if this is the last sibling.
-        """
-        self_index = self.siblings.index(self)
-        if self_index + 1 < len(self.siblings):
-            return self.siblings[self_index + 1]
-        return None
-
-    @property
-    def previous_sibling(self: _NodeType) -> _NodeType | None:
-        """Get the previous node in the sequence of siblings.
-
-        Returns `None` if this is the first sibling.
-        """
-        self_index = self.siblings.index(self)
-        if self_index - 1 >= 0:
-            return self.siblings[self_index - 1]
-        return None
-
-    def _add_child(
         self,
-        tokens: Sequence[Token],
+        label: RenderableType,
+        *,
+        style: StyleType = "tree",
+        guide_style: StyleType = "tree.line",
+        expanded: bool = True,
+        highlight: bool = False,
+        hide_root: bool = False,
     ) -> None:
-        """Make a child node for `self`."""
-        child = type(self)(tokens, create_root=False)
-        child.parent = self
-        self.children.append(child)
+        self.label = label
+        self.style = style
+        self.guide_style = guide_style
+        self.children: List[Tree] = []
+        self.expanded = expanded
+        self.highlight = highlight
+        self.hide_root = hide_root
 
-    def _set_children_from_tokens(self, tokens: Sequence[Token]) -> None:
-        """Convert the token stream to a tree structure and set the resulting
-        nodes as children of `self`."""
-        reversed_tokens = list(reversed(tokens))
-        while reversed_tokens:
-            token = reversed_tokens.pop()
+    def add(
+        self,
+        label: RenderableType,
+        *,
+        style: Optional[StyleType] = None,
+        guide_style: Optional[StyleType] = None,
+        expanded: bool = True,
+        highlight: Optional[bool] = False,
+    ) -> "Tree":
+        """Add a child tree.
 
-            if not token.nesting:
-                self._add_child([token])
-                continue
-            if token.nesting != 1:
-                raise ValueError("Invalid token nesting")
+        Args:
+            label (RenderableType): The renderable or str for the tree label.
+            style (StyleType, optional): Style of this tree. Defaults to "tree".
+            guide_style (StyleType, optional): Style of the guide lines. Defaults to "tree.line".
+            expanded (bool, optional): Also display children. Defaults to True.
+            highlight (Optional[bool], optional): Highlight renderable (if str). Defaults to False.
 
-            nested_tokens = [token]
-            nesting = 1
-            while reversed_tokens and nesting:
-                token = reversed_tokens.pop()
-                nested_tokens.append(token)
-                nesting += token.nesting
-            if nesting:
-                raise ValueError(f"unclosed tokens starting {nested_tokens[0]}")
-
-            self._add_child(nested_tokens)
-
-    def pretty(
-        self, *, indent: int = 2, show_text: bool = False, _current: int = 0
-    ) -> str:
-        """Create an XML style string of the tree."""
-        prefix = " " * _current
-        text = prefix + f"<{self.type}"
-        if not self.is_root and self.attrs:
-            text += " " + " ".join(f"{k}={v!r}" for k, v in self.attrs.items())
-        text += ">"
-        if (
-            show_text
-            and not self.is_root
-            and self.type in ("text", "text_special")
-            and self.content
-        ):
-            text += "\n" + textwrap.indent(self.content, prefix + " " * indent)
-        for child in self.children:
-            text += "\n" + child.pretty(
-                indent=indent, show_text=show_text, _current=_current + indent
-            )
-        return text
-
-    def walk(
-        self: _NodeType, *, include_self: bool = True
-    ) -> Generator[_NodeType, None, None]:
-        """Recursively yield all descendant nodes in the tree starting at self.
-
-        The order mimics the order of the underlying linear token
-        stream (i.e. depth first).
+        Returns:
+            Tree: A new child Tree, which may be further modified.
         """
-        if include_self:
-            yield self
-        for child in self.children:
-            yield from child.walk(include_self=True)
+        node = Tree(
+            label,
+            style=self.style if style is None else style,
+            guide_style=self.guide_style if guide_style is None else guide_style,
+            expanded=expanded,
+            highlight=self.highlight if highlight is None else highlight,
+        )
+        self.children.append(node)
+        return node
 
-    # NOTE:
-    # The values of the properties defined below directly map to properties
-    # of the underlying `Token`s. A root node does not translate to a `Token`
-    # object, so calling these property getters on a root node will raise an
-    # `AttributeError`.
-    #
-    # There is no mapping for `Token.nesting` because the `is_nested` property
-    # provides that data, and can be called on any node type, including root.
+    def __rich_console__(
+        self, console: "Console", options: "ConsoleOptions"
+    ) -> "RenderResult":
+        stack: List[Iterator[Tuple[bool, Tree]]] = []
+        pop = stack.pop
+        push = stack.append
+        new_line = Segment.line()
 
-    def _attribute_token(self) -> Token:
-        """Return the `Token` that is used as the data source for the
-        properties defined below."""
-        if self.token:
-            return self.token
-        if self.nester_tokens:
-            return self.nester_tokens.opening
-        raise AttributeError("Root node does not have the accessed attribute")
+        get_style = console.get_style
+        null_style = Style.null()
+        guide_style = get_style(self.guide_style, default="") or null_style
+        SPACE, CONTINUE, FORK, END = range(4)
 
-    @property
-    def tag(self) -> str:
-        """html tag name, e.g. \"p\""""
-        return self._attribute_token().tag
+        _Segment = Segment
 
-    @property
-    def attrs(self) -> dict[str, str | int | float]:
-        """Html attributes."""
-        return self._attribute_token().attrs
+        def make_guide(index: int, style: Style) -> Segment:
+            """Make a Segment for a level of the guide lines."""
+            if options.ascii_only:
+                line = self.ASCII_GUIDES[index]
+            else:
+                guide = 1 if style.bold else (2 if style.underline2 else 0)
+                line = self.TREE_GUIDES[0 if options.legacy_windows else guide][index]
+            return _Segment(line, style)
 
-    def attrGet(self, name: str) -> None | str | int | float:
-        """Get the value of attribute `name`, or null if it does not exist."""
-        return self._attribute_token().attrGet(name)
+        levels: List[Segment] = [make_guide(CONTINUE, guide_style)]
+        push(iter(loop_last([self])))
 
-    @property
-    def map(self) -> tuple[int, int] | None:
-        """Source map info. Format: `tuple[ line_begin, line_end ]`"""
-        map_ = self._attribute_token().map
-        if map_:
-            # Type ignore because `Token`s attribute types are not perfect
-            return tuple(map_)  # type: ignore
-        return None
+        guide_style_stack = StyleStack(get_style(self.guide_style))
+        style_stack = StyleStack(get_style(self.style))
+        remove_guide_styles = Style(bold=False, underline2=False)
 
-    @property
-    def level(self) -> int:
-        """nesting level, the same as `state.level`"""
-        return self._attribute_token().level
+        depth = 0
 
-    @property
-    def content(self) -> str:
-        """In a case of self-closing tag (code, html, fence, etc.), it
-        has contents of this tag."""
-        return self._attribute_token().content
+        while stack:
+            stack_node = pop()
+            try:
+                last, node = next(stack_node)
+            except StopIteration:
+                levels.pop()
+                if levels:
+                    guide_style = levels[-1].style or null_style
+                    levels[-1] = make_guide(FORK, guide_style)
+                    guide_style_stack.pop()
+                    style_stack.pop()
+                continue
+            push(stack_node)
+            if last:
+                levels[-1] = make_guide(END, levels[-1].style or null_style)
 
-    @property
-    def markup(self) -> str:
-        """'*' or '_' for emphasis, fence string for fence, etc."""
-        return self._attribute_token().markup
+            guide_style = guide_style_stack.current + get_style(node.guide_style)
+            style = style_stack.current + get_style(node.style)
+            prefix = levels[(2 if self.hide_root else 1) :]
+            renderable_lines = console.render_lines(
+                Styled(node.label, style),
+                options.update(
+                    width=options.max_width
+                    - sum(level.cell_length for level in prefix),
+                    highlight=self.highlight,
+                    height=None,
+                ),
+                pad=options.justify is not None,
+            )
 
-    @property
-    def info(self) -> str:
-        """fence infostring"""
-        return self._attribute_token().info
+            if not (depth == 0 and self.hide_root):
+                for first, line in loop_first(renderable_lines):
+                    if prefix:
+                        yield from _Segment.apply_style(
+                            prefix,
+                            style.background_style,
+                            post_style=remove_guide_styles,
+                        )
+                    yield from line
+                    yield new_line
+                    if first and prefix:
+                        prefix[-1] = make_guide(
+                            SPACE if last else CONTINUE, prefix[-1].style or null_style
+                        )
 
-    @property
-    def meta(self) -> dict[Any, Any]:
-        """A place for plugins to store an arbitrary data."""
-        return self._attribute_token().meta
+            if node.expanded and node.children:
+                levels[-1] = make_guide(
+                    SPACE if last else CONTINUE, levels[-1].style or null_style
+                )
+                levels.append(
+                    make_guide(END if len(node.children) == 1 else FORK, guide_style)
+                )
+                style_stack.push(get_style(node.style))
+                guide_style_stack.push(get_style(node.guide_style))
+                push(iter(loop_last(node.children)))
+                depth += 1
 
-    @property
-    def block(self) -> bool:
-        """True for block-level tokens, false for inline tokens."""
-        return self._attribute_token().block
+    def __rich_measure__(
+        self, console: "Console", options: "ConsoleOptions"
+    ) -> "Measurement":
+        stack: List[Iterator[Tree]] = [iter([self])]
+        pop = stack.pop
+        push = stack.append
+        minimum = 0
+        maximum = 0
+        measure = Measurement.get
+        level = 0
+        while stack:
+            iter_tree = pop()
+            try:
+                tree = next(iter_tree)
+            except StopIteration:
+                level -= 1
+                continue
+            push(iter_tree)
+            min_measure, max_measure = measure(console, options, tree.label)
+            indent = level * 4
+            minimum = max(min_measure + indent, minimum)
+            maximum = max(max_measure + indent, maximum)
+            if tree.expanded and tree.children:
+                push(iter(tree.children))
+                level += 1
+        return Measurement(minimum, maximum)
 
-    @property
-    def hidden(self) -> bool:
-        """If it's true, ignore this element when rendering.
-        Used for tight lists to hide paragraphs."""
-        return self._attribute_token().hidden
+
+if __name__ == "__main__":  # pragma: no cover
+    from pip._vendor.rich.console import Group
+    from pip._vendor.rich.markdown import Markdown
+    from pip._vendor.rich.panel import Panel
+    from pip._vendor.rich.syntax import Syntax
+    from pip._vendor.rich.table import Table
+
+    table = Table(row_styles=["", "dim"])
+
+    table.add_column("Released", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Box Office", justify="right", style="green")
+
+    table.add_row("Dec 20, 2019", "Star Wars: The Rise of Skywalker", "$952,110,690")
+    table.add_row("May 25, 2018", "Solo: A Star Wars Story", "$393,151,347")
+    table.add_row("Dec 15, 2017", "Star Wars Ep. V111: The Last Jedi", "$1,332,539,889")
+    table.add_row("Dec 16, 2016", "Rogue One: A Star Wars Story", "$1,332,439,889")
+
+    code = """\
+class Segment(NamedTuple):
+    text: str = ""
+    style: Optional[Style] = None
+    is_control: bool = False
+"""
+    syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
+
+    markdown = Markdown(
+        """\
+### example.md
+> Hello, World!
+>
+> Markdown _all_ the things
+"""
+    )
+
+    root = Tree("🌲 [b green]Rich Tree", highlight=True, hide_root=True)
+
+    node = root.add(":file_folder: Renderables", guide_style="red")
+    simple_node = node.add(":file_folder: [bold yellow]Atomic", guide_style="uu green")
+    simple_node.add(Group("📄 Syntax", syntax))
+    simple_node.add(Group("📄 Markdown", Panel(markdown, border_style="green")))
+
+    containers_node = node.add(
+        ":file_folder: [bold magenta]Containers", guide_style="bold magenta"
+    )
+    containers_node.expanded = True
+    panel = Panel.fit("Just a panel", border_style="red")
+    containers_node.add(Group("📄 Panels", panel))
+
+    containers_node.add(Group("📄 [b magenta]Table", table))
+
+    console = Console()
+
+    console.print(root)
