@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heartbeat-Home Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --dark: #000501;
+      --green: #73ab84;
+      --light-green: #99d19c;
+      --teal: #79c7c5;
+      --aqua: #ade1e5;
+      --white: #fff;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    body {
+      display: flex;
+      min-height: 100vh;
+      background-color: var(--aqua);
+      color: var(--dark);
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 250px;
+      background-color: var(--green);
+      color: var(--white);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+
+    .sidebar h2 {
+      font-weight: 700;
+      margin-bottom: 30px;
+    }
+
+    .sidebar ul {
+      list-style-type: none;
+    }
+
+    .sidebar ul li {
+      margin-bottom: 20px;
+    }
+
+    .sidebar ul li a {
+      text-decoration: none;
+      color: var(--white);
+      font-weight: 600;
+      display: block;
+    }
+
+    .sidebar ul li a:hover {
+      color: var(--aqua);
+    }
+
+    .logout {
+      background-color: var(--dark);
+      padding: 10px 15px;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    /* MAIN CONTENT */
+    .main-content {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(rgba(255, 255, 255, 0.9), rgba(255,255,255,0.95)),
+        url("https://www.signaturehealthservices.net/wp-content/uploads/Hero-Blood-Pressure-Check.jpg");
+      background-size: cover;
+      background-position: center;
+    }
+
+    header {
+      padding: 20px;
+      background-color: var(--teal);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      color: var(--dark);
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-heartbeat {
+      color: #e63946;
+      font-size: 1.8rem;
+    }
+
+    /* PATIENT DETAILS */
+    .patient-section {
+      padding: 20px;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+    }
+
+    .patient-card {
+      background-color: var(--white);
+      border-radius: 10px;
+      padding: 20px;
+      width: 300px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .patient-card h3 {
+      margin-bottom: 10px;
+      color: var(--dark);
+    }
+
+    .patient-card p {
+      margin-bottom: 5px;
+    }
+
+    .status-normal {
+      color: green;
+      font-weight: bold;
+    }
+
+    .status-alert {
+      color: red;
+      font-weight: bold;
+    }
+
+    /* VITAL SECTION */
+    .vitals-section {
+      background: url('https://www.unitekcollege.edu/wp-content/uploads/2022/01/shutterstock_1180800871-1030x687.jpg');
+      background-size: cover;
+      padding: 40px 20px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .vital-button {
+      background-color: var(--light-green);
+      border: none;
+      padding: 20px 40px;
+      border-radius: 10px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--dark);
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .vital-button:hover {
+      background-color: var(--teal);
+      transform: scale(1.05);
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        width: 200px;
+        height: 100vh;
+        left: -200px;
+        transition: 0.3s;
+      }
+
+      .sidebar.active {
+        left: 0;
+      }
+
+      body {
+        flex-direction: column;
+      }
+
+      .main-content {
+        margin-left: 0;
+      }
+
+      header {
+        flex-direction: column;
+      }
+
+      .patient-section {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div>
+      <h2>❤️ Heartbeat-Home</h2>
+      <ul>
+        <li><a href="#">Dashboard</a></li>
+        <li><a href="#">Add Patient</a></li>
+        <li><a href="#">Logout</a></li>
+      </ul>
+    </div>
+    <div class="logout">
+      <a href="#" style="color:white; text-decoration:none;">Log Out</a>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <header>
+      <h1><span class="logo-heartbeat">♥</span> Heartbeat-Home Dashboard</h1>
+    </header>
+
+    <!-- PATIENT DETAILS -->
+    <section class="patient-section">
+      <div class="patient-card">
+        <h3>John Doe</h3>
+        <p>Age: 54</p>
+        <p>Status: <span class="status-normal">Normal</span></p>
+      </div>
+      <div class="patient-card">
+        <h3>Linda Smith</h3>
+        <p>Age: 62</p>
+        <p>Status: <span class="status-alert">Alert</span></p>
+      </div>
+      <div class="patient-card">
+        <h3>Michael Brown</h3>
+        <p>Age: 47</p>
+        <p>Status: <span class="status-normal">Normal</span></p>
+      </div>
+    </section>
+
+    <!-- VITALS SECTION -->
+    <section class="vitals-section">
+      <button class="vital-button">Blood Pressure</button>
+      <button class="vital-button">Heart Rate</button>
+      <button class="vital-button">Oxygen</button>
+      <button class="vital-button">Temperature</button>
+    </section>
+  </div>
+
+</body>
+</html>
