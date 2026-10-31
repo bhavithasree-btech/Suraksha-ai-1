@@ -1,305 +1,117 @@
 from __future__ import annotations
 
+import http
 import logging
-import os
-from datetime import datetime
-from logging import Handler, LogRecord
-from types import ModuleType
-from typing import TYPE_CHECKING, ClassVar, Iterable, List, Optional, Type, Union
+import sys
+from copy import copy
+from typing import Literal
 
-if TYPE_CHECKING:
-    from ._log_render import FormatTimeCallable
-    from .console import Console, ConsoleRenderable
-    from .highlighter import Highlighter
-    from .traceback import Traceback
+import click
 
-from rich._null_file import NullFile
-
-from . import get_console
-from ._log_render import LogRender
-from .highlighter import ReprHighlighter
-from .text import Text
+TRACE_LOG_LEVEL = 5
 
 
-class RichHandler(Handler):
-    """A logging handler that renders output with Rich. The time / level / message and file are displayed in columns.
-    The level is color coded, and the message is syntax highlighted.
+class ColourizedFormatter(logging.Formatter):
+    """
+    A custom log formatter class that:
 
-    Note:
-        Be careful when enabling console markup in log messages if you have configured logging for libraries not
-        under your control. If a dependency writes messages containing square brackets, it may not produce the intended output.
-
-    Args:
-        level (Union[int, str], optional): Log level. Defaults to logging.NOTSET.
-        console (:class:`~rich.console.Console`, optional): Optional console instance to write logs.
-            Default will use a global console instance writing to stdout.
-        show_time (bool, optional): Show a column for the time. Defaults to True.
-        omit_repeated_times (bool, optional): Omit repetition of the same time. Defaults to True.
-        show_level (bool, optional): Show a column for the level. Defaults to True.
-        show_path (bool, optional): Show the path to the original log call. Defaults to True.
-        enable_link_path (bool, optional): Enable terminal link of path column to file. Defaults to True.
-        highlighter (Highlighter, optional): Highlighter to style log messages, or None to use ReprHighlighter. Defaults to None.
-        markup (bool, optional): Enable console markup in log messages. Defaults to False.
-        rich_tracebacks (bool, optional): Enable rich tracebacks with syntax highlighting and formatting. Defaults to False.
-        tracebacks_width (Optional[int], optional): Number of characters used to render tracebacks, or None for full width. Defaults to None.
-        tracebacks_code_width (int, optional): Number of code characters used to render tracebacks, or None for full width. Defaults to 88.
-        tracebacks_extra_lines (int, optional): Additional lines of code to render tracebacks, or None for full width. Defaults to None.
-        tracebacks_theme (str, optional): Override pygments theme used in traceback.
-        tracebacks_word_wrap (bool, optional): Enable word wrapping of long tracebacks lines. Defaults to True.
-        tracebacks_show_locals (bool, optional): Enable display of locals in tracebacks. Defaults to False.
-        tracebacks_suppress (Sequence[Union[str, ModuleType]]): Optional sequence of modules or paths to exclude from traceback.
-        tracebacks_max_frames (int, optional): Optional maximum number of frames returned by traceback.
-        locals_max_length (int, optional): Maximum length of containers before abbreviating, or None for no abbreviation.
-            Defaults to 10.
-        locals_max_string (int, optional): Maximum length of string before truncating, or None to disable. Defaults to 80.
-        log_time_format (Union[str, TimeFormatterCallable], optional): If ``log_time`` is enabled, either string for strftime or callable that formats the time. Defaults to "[%x %X] ".
-        keywords (List[str], optional): List of words to highlight instead of ``RichHandler.KEYWORDS``.
+    * Outputs the LOG_LEVEL with an appropriate color.
+    * If a log call includes an `extras={"color_message": ...}` it will be used
+      for formatting the output, instead of the plain text message.
     """
 
-    KEYWORDS: ClassVar[Optional[List[str]]] = [
-        "GET",
-        "POST",
-        "HEAD",
-        "PUT",
-        "DELETE",
-        "OPTIONS",
-        "TRACE",
-        "PATCH",
-    ]
-    HIGHLIGHTER_CLASS: ClassVar[Type[Highlighter]] = ReprHighlighter
+    level_name_colors = {
+        TRACE_LOG_LEVEL: lambda level_name: click.style(str(level_name), fg="blue"),
+        logging.DEBUG: lambda level_name: click.style(str(level_name), fg="cyan"),
+        logging.INFO: lambda level_name: click.style(str(level_name), fg="green"),
+        logging.WARNING: lambda level_name: click.style(str(level_name), fg="yellow"),
+        logging.ERROR: lambda level_name: click.style(str(level_name), fg="red"),
+        logging.CRITICAL: lambda level_name: click.style(str(level_name), fg="bright_red"),
+    }
 
     def __init__(
         self,
-        level: Union[int, str] = logging.NOTSET,
-        console: Optional[Console] = None,
-        *,
-        show_time: bool = True,
-        omit_repeated_times: bool = True,
-        show_level: bool = True,
-        show_path: bool = True,
-        enable_link_path: bool = True,
-        highlighter: Optional[Highlighter] = None,
-        markup: bool = False,
-        rich_tracebacks: bool = False,
-        tracebacks_width: Optional[int] = None,
-        tracebacks_code_width: Optional[int] = 88,
-        tracebacks_extra_lines: int = 3,
-        tracebacks_theme: Optional[str] = None,
-        tracebacks_word_wrap: bool = True,
-        tracebacks_show_locals: bool = False,
-        tracebacks_suppress: Iterable[Union[str, ModuleType]] = (),
-        tracebacks_max_frames: int = 100,
-        locals_max_length: int = 10,
-        locals_max_string: int = 80,
-        log_time_format: Union[str, FormatTimeCallable] = "[%x %X]",
-        keywords: Optional[List[str]] = None,
-    ) -> None:
-        super().__init__(level=level)
-        self.console = console or get_console()
-        self.highlighter = highlighter or self.HIGHLIGHTER_CLASS()
-        self._log_render = LogRender(
-            show_time=show_time,
-            show_level=show_level,
-            show_path=show_path,
-            time_format=log_time_format,
-            omit_repeated_times=omit_repeated_times,
-            level_width=None,
-        )
-        self.enable_link_path = enable_link_path
-        self.markup = markup
-        self.rich_tracebacks = rich_tracebacks
-        self.tracebacks_width = tracebacks_width
-        self.tracebacks_extra_lines = tracebacks_extra_lines
-        self.tracebacks_theme = tracebacks_theme
-        self.tracebacks_word_wrap = tracebacks_word_wrap
-        self.tracebacks_show_locals = tracebacks_show_locals
-        self.tracebacks_suppress = tracebacks_suppress
-        self.tracebacks_max_frames = tracebacks_max_frames
-        self.tracebacks_code_width = tracebacks_code_width
-        self.locals_max_length = locals_max_length
-        self.locals_max_string = locals_max_string
-        self.keywords = keywords
-
-    def get_level_text(self, record: LogRecord) -> Text:
-        """Get the level name from the record.
-
-        Args:
-            record (LogRecord): LogRecord instance.
-
-        Returns:
-            Text: A tuple of the style and level name.
-        """
-        level_name = record.levelname
-        level_text = Text.styled(
-            level_name.ljust(8), f"logging.level.{level_name.lower()}"
-        )
-        return level_text
-
-    def emit(self, record: LogRecord) -> None:
-        """Invoked by logging."""
-        message = self.format(record)
-        traceback = None
-        if (
-            self.rich_tracebacks
-            and record.exc_info
-            and record.exc_info != (None, None, None)
-        ):
-            exc_type, exc_value, exc_traceback = record.exc_info
-            assert exc_type is not None
-            assert exc_value is not None
-            from .traceback import Traceback
-
-            traceback = Traceback.from_exception(
-                exc_type,
-                exc_value,
-                exc_traceback,
-                width=self.tracebacks_width,
-                code_width=self.tracebacks_code_width,
-                extra_lines=self.tracebacks_extra_lines,
-                theme=self.tracebacks_theme,
-                word_wrap=self.tracebacks_word_wrap,
-                show_locals=self.tracebacks_show_locals,
-                locals_max_length=self.locals_max_length,
-                locals_max_string=self.locals_max_string,
-                suppress=self.tracebacks_suppress,
-                max_frames=self.tracebacks_max_frames,
-            )
-            message = record.getMessage()
-            if self.formatter:
-                record.message = record.getMessage()
-                formatter = self.formatter
-                if hasattr(formatter, "usesTime") and formatter.usesTime():
-                    record.asctime = formatter.formatTime(record, formatter.datefmt)
-                message = formatter.formatMessage(record)
-
-        message_renderable = self.render_message(record, message)
-        log_renderable = self.render(
-            record=record, traceback=traceback, message_renderable=message_renderable
-        )
-        if isinstance(self.console.file, NullFile):
-            # Handles pythonw, where stdout/stderr are null, and we return NullFile
-            # instance from Console.file. In this case, we still want to make a log record
-            # even though we won't be writing anything to a file.
-            self.handleError(record)
+        fmt: str | None = None,
+        datefmt: str | None = None,
+        style: Literal["%", "{", "$"] = "%",
+        use_colors: bool | None = None,
+    ):
+        if use_colors in (True, False):
+            self.use_colors = use_colors
         else:
-            try:
-                self.console.print(log_renderable)
-            except Exception:
-                self.handleError(record)
+            self.use_colors = sys.stdout.isatty()
+        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
 
-    def render_message(self, record: LogRecord, message: str) -> ConsoleRenderable:
-        """Render message text in to Text.
+    def color_level_name(self, level_name: str, level_no: int) -> str:
+        def default(level_name: str) -> str:
+            return str(level_name)  # pragma: no cover
 
-        Args:
-            record (LogRecord): logging Record.
-            message (str): String containing log message.
+        func = self.level_name_colors.get(level_no, default)
+        return func(level_name)
 
-        Returns:
-            ConsoleRenderable: Renderable to display log message.
-        """
-        use_markup = getattr(record, "markup", self.markup)
-        message_text = Text.from_markup(message) if use_markup else Text(message)
+    def should_use_colors(self) -> bool:
+        return True  # pragma: no cover
 
-        highlighter = getattr(record, "highlighter", self.highlighter)
-        if highlighter:
-            message_text = highlighter(message_text)
-
-        if self.keywords is None:
-            self.keywords = self.KEYWORDS
-
-        if self.keywords:
-            message_text.highlight_words(self.keywords, "logging.keyword")
-
-        return message_text
-
-    def render(
-        self,
-        *,
-        record: LogRecord,
-        traceback: Optional[Traceback],
-        message_renderable: ConsoleRenderable,
-    ) -> ConsoleRenderable:
-        """Render log for display.
-
-        Args:
-            record (LogRecord): logging Record.
-            traceback (Optional[Traceback]): Traceback instance or None for no Traceback.
-            message_renderable (ConsoleRenderable): Renderable (typically Text) containing log message contents.
-
-        Returns:
-            ConsoleRenderable: Renderable to display log.
-        """
-        path = os.path.basename(record.pathname)
-        level = self.get_level_text(record)
-        time_format = None if self.formatter is None else self.formatter.datefmt
-        log_time = datetime.fromtimestamp(record.created)
-
-        log_renderable = self._log_render(
-            self.console,
-            [message_renderable] if not traceback else [message_renderable, traceback],
-            log_time=log_time,
-            time_format=time_format,
-            level=level,
-            path=path,
-            line_no=record.lineno,
-            link_path=record.pathname if self.enable_link_path else None,
-        )
-        return log_renderable
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        levelname = recordcopy.levelname
+        seperator = " " * (8 - len(recordcopy.levelname))
+        if self.use_colors:
+            levelname = self.color_level_name(levelname, recordcopy.levelno)
+            if "color_message" in recordcopy.__dict__:
+                recordcopy.msg = recordcopy.__dict__["color_message"]
+                recordcopy.__dict__["message"] = recordcopy.getMessage()
+        recordcopy.__dict__["levelprefix"] = levelname + ":" + seperator
+        return super().formatMessage(recordcopy)
 
 
-if __name__ == "__main__":  # pragma: no cover
-    from time import sleep
+class DefaultFormatter(ColourizedFormatter):
+    def should_use_colors(self) -> bool:
+        return sys.stderr.isatty()  # pragma: no cover
 
-    FORMAT = "%(message)s"
-    # FORMAT = "%(asctime)-15s - %(levelname)s - %(message)s"
-    logging.basicConfig(
-        level="NOTSET",
-        format=FORMAT,
-        datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True, tracebacks_show_locals=True)],
-    )
-    log = logging.getLogger("rich")
 
-    log.info("Server starting...")
-    log.info("Listening on http://127.0.0.1:8080")
-    sleep(1)
+class AccessFormatter(ColourizedFormatter):
+    status_code_colours = {
+        1: lambda code: click.style(str(code), fg="bright_white"),
+        2: lambda code: click.style(str(code), fg="green"),
+        3: lambda code: click.style(str(code), fg="yellow"),
+        4: lambda code: click.style(str(code), fg="red"),
+        5: lambda code: click.style(str(code), fg="bright_red"),
+    }
 
-    log.info("GET /index.html 200 1298")
-    log.info("GET /imgs/backgrounds/back1.jpg 200 54386")
-    log.info("GET /css/styles.css 200 54386")
-    log.warning("GET /favicon.ico 404 242")
-    sleep(1)
-
-    log.debug(
-        "JSONRPC request\n--> %r\n<-- %r",
-        {
-            "version": "1.1",
-            "method": "confirmFruitPurchase",
-            "params": [["apple", "orange", "mangoes", "pomelo"], 1.123],
-            "id": "194521489",
-        },
-        {"version": "1.1", "result": True, "error": None, "id": "194521489"},
-    )
-    log.debug(
-        "Loading configuration file /adasd/asdasd/qeqwe/qwrqwrqwr/sdgsdgsdg/werwerwer/dfgerert/ertertert/ertetert/werwerwer"
-    )
-    log.error("Unable to find 'pomelo' in database!")
-    log.info("POST /jsonrpc/ 200 65532")
-    log.info("POST /admin/ 401 42234")
-    log.warning("password was rejected for admin site.")
-
-    def divide() -> None:
-        number = 1
-        divisor = 0
-        foos = ["foo"] * 100
-        log.debug("in divide")
+    def get_status_code(self, status_code: int) -> str:
         try:
-            number / divisor
-        except:
-            log.exception("An error of some kind occurred!")
+            status_phrase = http.HTTPStatus(status_code).phrase
+        except ValueError:
+            status_phrase = ""
+        status_and_phrase = f"{status_code} {status_phrase}"
+        if self.use_colors:
 
-    divide()
-    sleep(1)
-    log.critical("Out of memory!")
-    log.info("Server exited with code=-1")
-    log.info("[bold]EXITING...[/bold]", extra=dict(markup=True))
+            def default(code: int) -> str:
+                return status_and_phrase  # pragma: no cover
+
+            func = self.status_code_colours.get(status_code // 100, default)
+            return func(status_and_phrase)
+        return status_and_phrase
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        recordcopy = copy(record)
+        (
+            client_addr,
+            method,
+            full_path,
+            http_version,
+            status_code,
+        ) = recordcopy.args  # type: ignore[misc]
+        status_code = self.get_status_code(int(status_code))  # type: ignore[arg-type]
+        request_line = f"{method} {full_path} HTTP/{http_version}"
+        if self.use_colors:
+            request_line = click.style(request_line, bold=True)
+        recordcopy.__dict__.update(
+            {
+                "client_addr": client_addr,
+                "request_line": request_line,
+                "status_code": status_code,
+            }
+        )
+        return super().formatMessage(recordcopy)
