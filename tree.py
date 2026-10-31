@@ -202,11 +202,11 @@ class Tree(JupyterMixin):
 
 
 if __name__ == "__main__":  # pragma: no cover
-    from pip._vendor.rich.console import Group
-    from pip._vendor.rich.markdown import Markdown
-    from pip._vendor.rich.panel import Panel
-    from pip._vendor.rich.syntax import Syntax
-    from pip._vendor.rich.table import Table
+    from rich.console import Group
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+    from rich.syntax import Syntax
+    from rich.table import Table
 
     table = Table(row_styles=["", "dim"])
 

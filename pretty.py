@@ -27,7 +27,7 @@ from typing import (
     Union,
 )
 
-from pip._vendor.rich.repr import RichReprResult
+from rich.repr import RichReprResult
 
 try:
     import attr as _attr_module
@@ -192,7 +192,7 @@ def install(
         expand_all (bool, optional): Expand all containers. Defaults to False.
         max_frames (int): Maximum number of frames to show in a traceback, 0 for no maximum. Defaults to 100.
     """
-    from pip._vendor.rich import get_console
+    from rich import get_console
 
     console = console or get_console()
     assert console is not None
@@ -234,7 +234,7 @@ def install(
                 if self.pprint:
                     return _ipy_display_hook(
                         value,
-                        console=get_console(),
+                        console=console,
                         overflow=overflow,
                         indent_guides=indent_guides,
                         max_length=max_length,
@@ -1005,7 +1005,7 @@ if __name__ == "__main__":  # pragma: no cover
     }
     data["foo"].append(data)  # type: ignore[attr-defined]
 
-    from pip._vendor.rich import print
+    from rich import print
 
     print(Pretty(data, indent_guides=True, max_string=20))
 
