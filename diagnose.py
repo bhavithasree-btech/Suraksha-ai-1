@@ -1,10 +1,10 @@
 import os
 import platform
 
-from pip._vendor.rich import inspect
-from pip._vendor.rich.console import Console, get_windows_console_features
-from pip._vendor.rich.panel import Panel
-from pip._vendor.rich.pretty import Pretty
+from rich import inspect
+from rich.console import Console, get_windows_console_features
+from rich.panel import Panel
+from rich.pretty import Pretty
 
 
 def report() -> None:  # pragma: no cover
@@ -15,16 +15,18 @@ def report() -> None:  # pragma: no cover
     inspect(features)
 
     env_names = (
-        "TERM",
-        "COLORTERM",
         "CLICOLOR",
-        "NO_COLOR",
-        "TERM_PROGRAM",
+        "COLORTERM",
         "COLUMNS",
-        "LINES",
+        "JPY_PARENT_PID",
         "JUPYTER_COLUMNS",
         "JUPYTER_LINES",
-        "JPY_PARENT_PID",
+        "LINES",
+        "NO_COLOR",
+        "TERM_PROGRAM",
+        "TERM",
+        "TTY_COMPATIBLE",
+        "TTY_INTERACTIVE",
         "VSCODE_VERBOSE_LOGGING",
     )
     env = {name: os.getenv(name) for name in env_names}
