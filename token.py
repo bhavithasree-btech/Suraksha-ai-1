@@ -1,178 +1,214 @@
-from __future__ import annotations
+"""
+    pygments.token
+    ~~~~~~~~~~~~~~
 
-from collections.abc import Callable, MutableMapping
-import dataclasses as dc
-from typing import Any, Literal
-import warnings
+    Basic token types and the standard tokens.
 
-
-def convert_attrs(value: Any) -> Any:
-    """Convert Token.attrs set as ``None`` or ``[[key, value], ...]`` to a dict.
-
-    This improves compatibility with upstream markdown-it.
-    """
-    if not value:
-        return {}
-    if isinstance(value, list):
-        return dict(value)
-    return value
+    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :license: BSD, see LICENSE for details.
+"""
 
 
-@dc.dataclass(slots=True)
-class Token:
-    type: str
-    """Type of the token (string, e.g. "paragraph_open")"""
+class _TokenType(tuple):
+    parent = None
 
-    tag: str
-    """HTML tag name, e.g. 'p'"""
+    def split(self):
+        buf = []
+        node = self
+        while node is not None:
+            buf.append(node)
+            node = node.parent
+        buf.reverse()
+        return buf
 
-    nesting: Literal[-1, 0, 1]
-    """Level change (number in {-1, 0, 1} set), where:
-    -  `1` means the tag is opening
-    -  `0` means the tag is self-closing
-    - `-1` means the tag is closing
-    """
+    def __init__(self, *args):
+        # no need to call super.__init__
+        self.subtypes = set()
 
-    attrs: dict[str, str | int | float] = dc.field(default_factory=dict)
-    """HTML attributes.
-    Note this differs from the upstream "list of lists" format,
-    although than an instance can still be initialised with this format.
-    """
-
-    map: list[int] | None = None
-    """Source map info. Format: `[ line_begin, line_end ]`"""
-
-    level: int = 0
-    """Nesting level, the same as `state.level`"""
-
-    children: list[Token] | None = None
-    """Array of child nodes (inline and img tokens)."""
-
-    content: str = ""
-    """Inner content, in the case of a self-closing tag (code, html, fence, etc.),"""
-
-    markup: str = ""
-    """'*' or '_' for emphasis, fence string for fence, etc."""
-
-    info: str = ""
-    """Additional information:
-    - Info string for "fence" tokens
-    - The value "auto" for autolink "link_open" and "link_close" tokens
-    - The string value of the item marker for ordered-list "list_item_open" tokens
-    """
-
-    meta: dict[Any, Any] = dc.field(default_factory=dict)
-    """A place for plugins to store any arbitrary data"""
-
-    block: bool = False
-    """True for block-level tokens, false for inline tokens.
-    Used in renderer to calculate line breaks
-    """
-
-    hidden: bool = False
-    """If true, ignore this element when rendering.
-    Used for tight lists to hide paragraphs.
-    """
-
-    def __post_init__(self) -> None:
-        self.attrs = convert_attrs(self.attrs)
-
-    def attrIndex(self, name: str) -> int:
-        warnings.warn(  # noqa: B028
-            "Token.attrIndex should not be used, since Token.attrs is a dictionary",
-            UserWarning,
+    def __contains__(self, val):
+        return self is val or (
+            type(val) is self.__class__ and
+            val[:len(self)] == self
         )
-        if name not in self.attrs:
-            return -1
-        return list(self.attrs.keys()).index(name)
 
-    def attrItems(self) -> list[tuple[str, str | int | float]]:
-        """Get (key, value) list of attrs."""
-        return list(self.attrs.items())
+    def __getattr__(self, val):
+        if not val or not val[0].isupper():
+            return tuple.__getattribute__(self, val)
+        new = _TokenType(self + (val,))
+        setattr(self, val, new)
+        self.subtypes.add(new)
+        new.parent = self
+        return new
 
-    def attrPush(self, attrData: tuple[str, str | int | float]) -> None:
-        """Add `[ name, value ]` attribute to list. Init attrs if necessary."""
-        name, value = attrData
-        self.attrSet(name, value)
+    def __repr__(self):
+        return 'Token' + (self and '.' or '') + '.'.join(self)
 
-    def attrSet(self, name: str, value: str | int | float) -> None:
-        """Set `name` attribute to `value`. Override old value if exists."""
-        self.attrs[name] = value
+    def __copy__(self):
+        # These instances are supposed to be singletons
+        return self
 
-    def attrGet(self, name: str) -> None | str | int | float:
-        """Get the value of attribute `name`, or null if it does not exist."""
-        return self.attrs.get(name, None)
+    def __deepcopy__(self, memo):
+        # These instances are supposed to be singletons
+        return self
 
-    def attrJoin(self, name: str, value: str) -> None:
-        """Join value to existing attribute via space.
-        Or create new attribute if not exists.
-        Useful to operate with token classes.
-        """
-        if name in self.attrs:
-            current = self.attrs[name]
-            if not isinstance(current, str):
-                raise TypeError(
-                    f"existing attr 'name' is not a str: {self.attrs[name]}"
-                )
-            self.attrs[name] = f"{current} {value}"
-        else:
-            self.attrs[name] = value
 
-    def copy(self, **changes: Any) -> Token:
-        """Return a shallow copy of the instance."""
-        return dc.replace(self, **changes)
+Token = _TokenType()
 
-    def as_dict(
-        self,
-        *,
-        children: bool = True,
-        as_upstream: bool = True,
-        meta_serializer: Callable[[dict[Any, Any]], Any] | None = None,
-        filter: Callable[[str, Any], bool] | None = None,
-        dict_factory: Callable[..., MutableMapping[str, Any]] = dict,
-    ) -> MutableMapping[str, Any]:
-        """Return the token as a dictionary.
+# Special token types
+Text = Token.Text
+Whitespace = Text.Whitespace
+Escape = Token.Escape
+Error = Token.Error
+# Text that doesn't belong to this lexer (e.g. HTML in PHP)
+Other = Token.Other
 
-        :param children: Also convert children to dicts
-        :param as_upstream: Ensure the output dictionary is equal to that created by markdown-it
-            For example, attrs are converted to null or lists
-        :param meta_serializer: hook for serializing ``Token.meta``
-        :param filter: A callable whose return code determines whether an
-            attribute or element is included (``True``) or dropped (``False``).
-            Is called with the (key, value) pair.
-        :param dict_factory: A callable to produce dictionaries from.
-            For example, to produce ordered dictionaries instead of normal Python
-            dictionaries, pass in ``collections.OrderedDict``.
+# Common token types for source code
+Keyword = Token.Keyword
+Name = Token.Name
+Literal = Token.Literal
+String = Literal.String
+Number = Literal.Number
+Punctuation = Token.Punctuation
+Operator = Token.Operator
+Comment = Token.Comment
 
-        """
-        mapping = dict_factory((f.name, getattr(self, f.name)) for f in dc.fields(self))
-        if filter:
-            mapping = dict_factory((k, v) for k, v in mapping.items() if filter(k, v))
-        if as_upstream and "attrs" in mapping:
-            mapping["attrs"] = (
-                None
-                if not mapping["attrs"]
-                else [[k, v] for k, v in mapping["attrs"].items()]
-            )
-        if meta_serializer and "meta" in mapping:
-            mapping["meta"] = meta_serializer(mapping["meta"])
-        if children and mapping.get("children", None):
-            mapping["children"] = [
-                child.as_dict(
-                    children=children,
-                    filter=filter,
-                    dict_factory=dict_factory,
-                    as_upstream=as_upstream,
-                    meta_serializer=meta_serializer,
-                )
-                for child in mapping["children"]
-            ]
-        return mapping
+# Generic types for non-source code
+Generic = Token.Generic
 
-    @classmethod
-    def from_dict(cls, dct: MutableMapping[str, Any]) -> Token:
-        """Convert a dict to a Token."""
-        token = cls(**dct)
-        if token.children:
-            token.children = [cls.from_dict(c) for c in token.children]  # type: ignore[arg-type]
-        return token
+# String and some others are not direct children of Token.
+# alias them:
+Token.Token = Token
+Token.String = String
+Token.Number = Number
+
+
+def is_token_subtype(ttype, other):
+    """
+    Return True if ``ttype`` is a subtype of ``other``.
+
+    exists for backwards compatibility. use ``ttype in other`` now.
+    """
+    return ttype in other
+
+
+def string_to_tokentype(s):
+    """
+    Convert a string into a token type::
+
+        >>> string_to_token('String.Double')
+        Token.Literal.String.Double
+        >>> string_to_token('Token.Literal.Number')
+        Token.Literal.Number
+        >>> string_to_token('')
+        Token
+
+    Tokens that are already tokens are returned unchanged:
+
+        >>> string_to_token(String)
+        Token.Literal.String
+    """
+    if isinstance(s, _TokenType):
+        return s
+    if not s:
+        return Token
+    node = Token
+    for item in s.split('.'):
+        node = getattr(node, item)
+    return node
+
+
+# Map standard token types to short names, used in CSS class naming.
+# If you add a new item, please be sure to run this file to perform
+# a consistency check for duplicate values.
+STANDARD_TYPES = {
+    Token:                         '',
+
+    Text:                          '',
+    Whitespace:                    'w',
+    Escape:                        'esc',
+    Error:                         'err',
+    Other:                         'x',
+
+    Keyword:                       'k',
+    Keyword.Constant:              'kc',
+    Keyword.Declaration:           'kd',
+    Keyword.Namespace:             'kn',
+    Keyword.Pseudo:                'kp',
+    Keyword.Reserved:              'kr',
+    Keyword.Type:                  'kt',
+
+    Name:                          'n',
+    Name.Attribute:                'na',
+    Name.Builtin:                  'nb',
+    Name.Builtin.Pseudo:           'bp',
+    Name.Class:                    'nc',
+    Name.Constant:                 'no',
+    Name.Decorator:                'nd',
+    Name.Entity:                   'ni',
+    Name.Exception:                'ne',
+    Name.Function:                 'nf',
+    Name.Function.Magic:           'fm',
+    Name.Property:                 'py',
+    Name.Label:                    'nl',
+    Name.Namespace:                'nn',
+    Name.Other:                    'nx',
+    Name.Tag:                      'nt',
+    Name.Variable:                 'nv',
+    Name.Variable.Class:           'vc',
+    Name.Variable.Global:          'vg',
+    Name.Variable.Instance:        'vi',
+    Name.Variable.Magic:           'vm',
+
+    Literal:                       'l',
+    Literal.Date:                  'ld',
+
+    String:                        's',
+    String.Affix:                  'sa',
+    String.Backtick:               'sb',
+    String.Char:                   'sc',
+    String.Delimiter:              'dl',
+    String.Doc:                    'sd',
+    String.Double:                 's2',
+    String.Escape:                 'se',
+    String.Heredoc:                'sh',
+    String.Interpol:               'si',
+    String.Other:                  'sx',
+    String.Regex:                  'sr',
+    String.Single:                 's1',
+    String.Symbol:                 'ss',
+
+    Number:                        'm',
+    Number.Bin:                    'mb',
+    Number.Float:                  'mf',
+    Number.Hex:                    'mh',
+    Number.Integer:                'mi',
+    Number.Integer.Long:           'il',
+    Number.Oct:                    'mo',
+
+    Operator:                      'o',
+    Operator.Word:                 'ow',
+
+    Punctuation:                   'p',
+    Punctuation.Marker:            'pm',
+
+    Comment:                       'c',
+    Comment.Hashbang:              'ch',
+    Comment.Multiline:             'cm',
+    Comment.Preproc:               'cp',
+    Comment.PreprocFile:           'cpf',
+    Comment.Single:                'c1',
+    Comment.Special:               'cs',
+
+    Generic:                       'g',
+    Generic.Deleted:               'gd',
+    Generic.Emph:                  'ge',
+    Generic.Error:                 'gr',
+    Generic.Heading:               'gh',
+    Generic.Inserted:              'gi',
+    Generic.Output:                'go',
+    Generic.Prompt:                'gp',
+    Generic.Strong:                'gs',
+    Generic.Subheading:            'gu',
+    Generic.EmphStrong:            'ges',
+    Generic.Traceback:             'gt',
+}
